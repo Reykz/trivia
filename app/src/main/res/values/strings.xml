@@ -8,4 +8,5 @@
     <string name="counter_questions">0 out 100</string>
     <string name="correct_answer">Correct!</string>
     <string name="wrong_answer">Wrong!</string>
+    <string name="score">Score 0</string>
 </resources>

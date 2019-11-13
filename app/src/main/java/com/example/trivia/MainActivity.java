@@ -5,6 +5,7 @@ import androidx.cardview.widget.CardView;
 
 import android.graphics.Color;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.View;
 import android.view.animation.AlphaAnimation;
 import android.view.animation.Animation;
@@ -14,16 +15,19 @@ import android.widget.ImageButton;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import com.example.trivia.controller.AppController;
 import com.example.trivia.data.AnswerListAsyncResponse;
 import com.example.trivia.data.QuestionBank;
 import com.example.trivia.model.Question;
+import com.example.trivia.model.Score;
+import com.example.trivia.util.Prefs;
 
+import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
+
 
 public class MainActivity extends AppCompatActivity implements View.OnClickListener {
+    private static final String SCORE_ID = "score_prefs";
     private TextView questionTextview;
     private TextView questionCounterTextview;
     private Button trueButton;
@@ -33,29 +37,51 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     private int currentQuestionIndex = 0;
     private List<Question> questionList;
 
+    private TextView scoreTextview;
+    private TextView highestScoreTextview;
+    private Score score;
+    private int scoreCounter = 0;
+    private Prefs prefs;
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        score = new Score();
+
+        prefs = new Prefs(MainActivity.this);
+
+//        prefs.saveHighScore(scoreCounter);
+//        Log.d("Second", "onClick: " + prefs.getHighScore());
+
         nextButton = findViewById(R.id.next_button);
         prevButton = findViewById(R.id.prev_button);
         falseButton = findViewById(R.id.false_button);
         trueButton = findViewById(R.id.true_button);
         questionCounterTextview = findViewById(R.id.counter_text);
-        questionTextview = findViewById(R.id.question_textview);
+        questionTextview = findViewById(R.id.question_textView);
+        scoreTextview = findViewById(R.id.currentScore_textView);
+        highestScoreTextview = findViewById(R.id.highestScore_textView);
 
         nextButton.setOnClickListener(this);
         prevButton.setOnClickListener(this);
         trueButton.setOnClickListener(this);
         falseButton.setOnClickListener(this);
 
+        scoreTextview.setText(MessageFormat.format("Score : {0}", String.valueOf(score.getScore())));
+        highestScoreTextview.setText(MessageFormat.format("Highest Score : {0}", String.valueOf(prefs.getHighScore())));
+
+        //get previous state
+        currentQuestionIndex  = prefs.getState();
+        Log.d("State", "onCreate: " + currentQuestionIndex);
+
             questionList = new QuestionBank().qetQuestion(new AnswerListAsyncResponse() {
             @Override
             public void processFinished(ArrayList<Question> questionArrayList) {
                 questionTextview.setText(questionArrayList.get(currentQuestionIndex).getAnswer());
-                questionCounterTextview.setText(currentQuestionIndex + 1 + " / " + questionArrayList.size()); // 0 / 234
+                questionCounterTextview.setText(MessageFormat.format("{0} / {1}", currentQuestionIndex + 1, questionArrayList.size())); // 0 / 234
 
                 //Log.d("Inside", "processFinished: " + questionArrayList);
             }
@@ -63,8 +89,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         });
 
     }
-
-
 
     @Override
     public void onClick(View view) {
@@ -81,8 +105,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 }
                 break;
             case R.id.next_button:
-                currentQuestionIndex = (currentQuestionIndex + 1) % questionList.size();
-                updateQuestion();
+                goNext();
                 break;
             case R.id.true_button:
                 checkAnswer(true);
@@ -99,9 +122,11 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         boolean answerIsTrue = questionList.get(currentQuestionIndex).isAnswerTrue();
         int toastMessageId = 0;
         if (userChooseCorrect == answerIsTrue){
+            addPoints();
             fadeView();
             toastMessageId = R.string.correct_answer;
         }else {
+            decrementPoints();
             shakeAnimation();
             toastMessageId = R.string.wrong_answer;
         }
@@ -110,10 +135,33 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 .show();
     }
 
+    private void addPoints(){
+        scoreCounter += 100;
+        score.setScore(scoreCounter);
+        scoreTextview.setText(MessageFormat.format("Score : {0}", String.valueOf(score.getScore())));
+
+//        Log.d("scoreadd", "addPoints: " + scoreCounter);
+    }
+
+    private void decrementPoints(){
+        scoreCounter -= 50;
+
+        if (scoreCounter > 0){
+            score.setScore(scoreCounter);
+        }else {
+            scoreCounter = 0;
+            score.setScore(scoreCounter);
+        }
+        scoreTextview.setText(MessageFormat.format("Score: {0}", String.valueOf(score.getScore())));
+
+//        Log.d("scoreDecrement", "decrementPoints: " + scoreCounter);
+    }
+
     private void updateQuestion() {
         String question = questionList.get(currentQuestionIndex).getAnswer();
         questionTextview.setText(question);
-        questionCounterTextview.setText(currentQuestionIndex + 1 + " / " + questionList.size()); // 0 / 234
+        questionCounterTextview.setText(MessageFormat.format("{0} / {1}", currentQuestionIndex + 1, questionList.size())); // 0 / 234
+
     }
 
     private void fadeView(){
@@ -135,6 +183,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             @Override
             public void onAnimationEnd(Animation animation) {
                 cardView.setCardBackgroundColor(Color.WHITE);
+                goNext();
             }
 
             @Override
@@ -142,7 +191,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
             }
         });
-        currentQuestionIndex = (currentQuestionIndex + 1) % questionList.size();
+//        currentQuestionIndex = (currentQuestionIndex + 1) % questionList.size();
 
     }
 
@@ -161,6 +210,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             @Override
             public void onAnimationEnd(Animation animation) {
                 cardView.setCardBackgroundColor(Color.WHITE);
+                goNext();
             }
 
             @Override
@@ -170,4 +220,17 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         });
 
     }
+    private void goNext(){
+        currentQuestionIndex = (currentQuestionIndex + 1) % questionList.size();
+        updateQuestion();
+    }
+
+    @Override
+    protected void onPause() {
+        Log.d("State pause", "onCreate: " + currentQuestionIndex);
+        prefs.saveHighScore(score.getScore());
+        prefs.setState(currentQuestionIndex);
+        super.onPause();
+    }
 }
+
